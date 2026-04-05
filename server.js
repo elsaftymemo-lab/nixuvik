@@ -1,67 +1,45 @@
 const express = require('express');
-const cors = require('cors');
-const mongoose = require('mongoose');
-
+const path = require('path');
 const app = express();
-app.use(cors());
-// We increase JSON limits to support up to 50MB PDFs Base64 strings
+
+// Increase JSON payload limit to handle large PDF base64 strings if needed
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Connect to MongoDB. Railway automatically injects process.env.MONGO_URL when you add the DB
-const mongooseUrl = process.env.MONGO_URL || 'mongodb://localhost:27017/nixuvik';
-mongoose.connect(mongooseUrl)
-  .then(() => console.log("MongoDB Connected Successfully"))
-  .catch(err => console.error("MongoDB Connection Error:", err));
+// 1. Serve static files (like index.html, CSS, JS, images) from the current directory.
+// This is the CRITICAL line that makes your app load as a normal website on your domain!
+app.use(express.static(__dirname));
 
-const BookSchema = new mongoose.Schema({
-  id: String,
-  title: String,
-  size: Number,
-  type: String,
-  cover: String, // PDF Thumbnail in Base64
-  data: String,  // Entire file encoded in Base64
-  uploadDate: String
-});
-const Book = mongoose.model('Book', BookSchema);
+// 2. Simple in-memory database fallback (for demonstration until MongoDB is connected)
+let booksDatabase = [];
 
-// GET /api/books (Fetches the grid list WITHOUT downloading the massive 50MB files)
-app.get('/api/books', async (req, res) => {
-  try {
-    const books = await Book.find({}, '-data'); // Exclude the file data
-    res.json(books);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+// API: Get all books
+app.get('/api/books', (req, res) => {
+  res.json(booksDatabase);
 });
 
-// POST /api/books (Uploads the book)
-app.post('/api/books', async (req, res) => {
-  try {
-    const book = new Book(req.body);
-    await book.save();
-    res.json({ success: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+// API: Upload a book
+app.post('/api/books', (req, res) => {
+  const book = req.body;
+  if (!book.id) book.id = Date.now().toString();
+  booksDatabase.push(book);
+  res.status(201).json({ success: true, book });
 });
 
-// GET /api/books/:id (Downloads a specific file to view)
-app.get('/api/books/:id', async (req, res) => {
-  try {
-    const book = await Book.findOne({ id: req.params.id });
-    if (!book) return res.status(404).json({ error: "Book not found" });
-    res.json(book);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+// API: Delete a book
+app.delete('/api/books/:id', (req, res) => {
+  const { id } = req.params;
+  booksDatabase = booksDatabase.filter(b => b.id !== id);
+  res.json({ success: true });
 });
 
-// DELETE /api/books/:id
-app.delete('/api/books/:id', async (req, res) => {
-  try {
-    await Book.deleteOne({ id: req.params.id });
-    res.json({ success: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+// 3. Catch-all: Send the index.html for any other URL (useful for Single Page Applications)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.get('/', (req, res) => {
-  res.send('NIXUVIK API is running!');
-});
-
+// Start the server (Railway automatically provides the PORT environment variable)
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server is running! Your site is now live at the root domain on port ${PORT}`);
+});

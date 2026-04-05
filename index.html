@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NIXUVIK</title>
+  <title>NIXUVIK - 📚 المكتبة الذكية</title>
   
   <!-- Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
   
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -15,499 +15,435 @@
       darkMode: 'class',
       theme: {
         extend: {
-          fontFamily: { sans: ['Cairo', 'sans-serif'] },
+          fontFamily: { 'cairo': ['Cairo', 'sans-serif'] },
           colors: {
             ytDark: '#0f0f0f',
-            ytDarkSec: '#272727',
-            ytDarkHover: '#3f3f3f',
-            ytLight: '#ffffff',
-            ytLightSec: '#f2f2f2',
-            ytLightHover: '#e5e5e5'
+            ytDarkCard: '#212121',
+            ytDarkHover: '#383838',
+            ytAccent: '#00e5ff',
           }
         }
       }
     }
   </script>
 
-  <!-- PDF.js for Cover Extraction -->
+  <!-- PDF.js library for thumbnail generation -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-  <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
-  </script>
-
+  
   <style>
     body { font-family: 'Cairo', sans-serif; transition: background-color 0.3s, color 0.3s; }
     
-    /* Book Card Aspect Ratio (2:3) */
-    .book-cover-container {
+    /* Book Card Aspect Ratio 2:3 (Vertical like real books, NOT horizontal like YT videos) */
+    .book-thumbnail {
       aspect-ratio: 2 / 3;
-      width: 100%;
-      background-color: #333;
-      border-radius: 12px;
-      overflow: hidden;
-      position: relative;
-    }
-    .book-cover-container img {
-      width: 100%;
-      height: 100%;
       object-fit: cover;
+      width: 100%;
+      border-radius: 12px;
+    }
+
+    .book-card {
+      transition: transform 0.2s;
+      cursor: pointer;
+    }
+    .book-card:hover {
+      transform: scale(1.02);
     }
     
-    /* Hide scrollbar for a cleaner YT look */
+    /* Toast Notification */
+    #toast {
+      position: fixed; top: -100px; left: 50%; transform: translateX(-50%);
+      background: #ff4757; color: white; padding: 12px 24px;
+      border-radius: 8px; font-weight: bold; z-index: 9999;
+      transition: top 0.4s ease-in-out;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+    #toast.show { top: 20px; }
+    
+    /* Scrollbar */
     ::-webkit-scrollbar { width: 8px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #717171; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #888; }
     
-    /* Toast Animation */
-    @keyframes slideIn {
-      from { transform: translateY(-100%); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
-    @keyframes slideOut {
-      from { transform: translateY(0); opacity: 1; }
-      to { transform: translateY(-100%); opacity: 0; }
-    }
-    .toast-enter { animation: slideIn 0.4s ease forwards; }
-    .toast-exit { animation: slideOut 0.4s ease forwards; }
-
-    /* PDF Viewer Modal */
-    #pdfViewer {
-      display: none;
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.9); z-index: 5000;
-      flex-direction: column;
-    }
-    #pdfViewer.active { display: flex; }
-    #pdfViewer iframe { flex: 1; width: 100%; border: none; background: white; }
+    /* Hidden file input */
+    #fileInput { display: none; }
   </style>
 </head>
-<body class="bg-ytLight text-black dark:bg-ytDark dark:text-white min-h-screen flex flex-col">
 
-  <!-- Toast Notification Container -->
-  <div id="toastContainer" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-[6000] w-full max-w-md px-4 pointer-events-none"></div>
+<!-- Body matches YT Dark Theme by default -->
+<body class="bg-gray-50 text-black dark:bg-ytDark dark:text-white flex h-screen overflow-hidden">
 
-  <!-- Header -->
-  <header class="h-16 flex items-center justify-between px-4 sticky top-0 bg-white dark:bg-ytDark border-b border-gray-200 dark:border-ytDarkSec z-50">
-    <!-- Logo -->
-    <div class="flex items-center gap-4">
-      <button class="p-2 rounded-full hover:bg-ytLightHover dark:hover:bg-ytDarkHover lg:hidden" onclick="toggleSidebar()">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-      </button>
-      <div class="text-xl font-black tracking-tight flex items-center gap-2 cursor-pointer" onclick="switchTab('home')">
-        <span class="text-2xl">📚</span> NIXUVIK
-      </div>
+  <!-- Toast for offline fallback warning -->
+  <div id="toast">⚠️ الخادم غير متصل. سيتم حفظ الكتب في متصفحك.</div>
+
+  <!-- Sidebar (Left side since it's RTL) -->
+  <aside class="w-64 flex-shrink-0 h-full overflow-y-auto border-l border-gray-200 dark:border-gray-800 p-4 hidden md:block">
+    <div class="mb-8 px-2 flex items-center gap-3">
+      <div class="text-2xl">📚</div>
+      <h1 class="text-xl font-extrabold tracking-tight">NIXUVIK</h1>
     </div>
 
-    <!-- Search -->
-    <div class="hidden md:flex flex-1 max-w-xl mx-8 items-center">
-      <div class="flex w-full border border-gray-300 dark:border-ytDarkSec rounded-full overflow-hidden bg-ytLightSec dark:bg-[#121212]">
-        <input type="text" id="searchInput" placeholder="بحث عن كتاب..." class="w-full bg-transparent px-4 py-2 outline-none dark:text-white" onkeyup="searchBooks()">
-        <button class="px-5 bg-gray-200 dark:bg-ytDarkSec border-r border-gray-300 dark:border-ytDarkSec hover:bg-gray-300 dark:hover:bg-ytDarkHover">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-        </button>
+    <nav class="space-y-2">
+      <button onclick="switchTab('home')" id="btn-home" class="w-full flex items-center gap-4 px-4 py-3 rounded-lg bg-gray-200 dark:bg-ytDarkHover text-black dark:text-white font-semibold transition">
+        <span class="text-xl">🏠</span>
+        <span>الرئيسية</span>
+      </button>
+
+      <button onclick="switchTab('myLibrary')" id="btn-library" class="w-full flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-ytDarkHover text-gray-700 dark:text-gray-300 font-semibold transition">
+        <span class="text-xl">📖</span>
+        <span>مكتبتي</span>
+      </button>
+    </nav>
+    
+    <div class="mt-auto pt-8 border-t border-gray-200 dark:border-gray-800 absolute bottom-4 w-56">
+      <div id="connStatus" class="text-sm font-semibold flex items-center gap-2 text-green-500">
+        <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+        متصل بالخادم
       </div>
     </div>
+  </aside>
 
-    <!-- Actions -->
-    <div class="flex items-center gap-2">
-      <button onclick="document.getElementById('fileInput').click()" class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold transition">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-        <span class="hidden sm:inline">رفع كتاب</span>
-      </button>
-      <input type="file" id="fileInput" accept=".pdf" class="hidden" onchange="handleFileUpload(event)">
+  <!-- Main Content Area -->
+  <main class="flex-1 flex flex-col h-full relative">
+    
+    <!-- Topbar -->
+    <header class="h-16 flex items-center justify-between px-6 border-b border-gray-200 dark:border-gray-800 shrink-0">
       
-      <button onclick="toggleTheme()" class="p-2 rounded-full hover:bg-ytLightHover dark:hover:bg-ytDarkHover" title="تغيير المظهر">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
-      </button>
-    </div>
-  </header>
-
-  <div class="flex flex-1 overflow-hidden">
-    <!-- Sidebar -->
-    <aside id="sidebar" class="w-64 flex-shrink-0 bg-white dark:bg-ytDark border-l border-gray-200 dark:border-ytDarkSec overflow-y-auto hidden lg:block transition-all z-40">
-      <div class="p-3">
-        <button onclick="switchTab('home')" id="btn-home" class="w-full flex items-center gap-4 px-4 py-3 rounded-xl hover:bg-ytLightHover dark:hover:bg-ytDarkHover text-right bg-ytLightSec dark:bg-ytDarkSec font-semibold">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
-          الرئيسية
-        </button>
-        <button onclick="switchTab('library')" id="btn-library" class="w-full flex items-center gap-4 px-4 py-3 mt-1 rounded-xl hover:bg-ytLightHover dark:hover:bg-ytDarkHover text-right font-semibold">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
-          مكتبتي
-        </button>
+      <!-- Mobile Logo -->
+      <div class="md:hidden flex items-center gap-2">
+        <div class="text-xl">📚</div>
+        <h1 class="font-extrabold">NIXUVIK</h1>
       </div>
-      <div class="px-6 py-4 border-t border-gray-200 dark:border-ytDarkSec mt-4">
-        <p class="text-sm text-gray-500 dark:text-gray-400 font-bold mb-2">حالة الاتصال:</p>
-        <div id="statusIndicator" class="flex items-center gap-2 text-sm text-yellow-600 dark:text-yellow-400">
-          <span class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span>
-          جاري الفحص...
+
+      <!-- Search (Visual Only) -->
+      <div class="flex-1 max-w-xl mx-4 hidden sm:block">
+        <div class="flex relative">
+          <input type="text" placeholder="بحث عن كتاب..." class="w-full bg-gray-100 dark:bg-ytDarkCard border border-gray-300 dark:border-gray-700 rounded-l-full px-5 py-2 focus:outline-none focus:border-blue-500 dark:focus:border-blue-400">
+          <button class="bg-gray-200 dark:bg-ytDarkHover border border-gray-300 dark:border-gray-700 border-r-0 rounded-r-full px-6 py-2">
+            🔍
+          </button>
         </div>
       </div>
-    </aside>
 
-    <!-- Main Content -->
-    <main class="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#f9f9f9] dark:bg-ytDark relative">
+      <!-- Actions -->
+      <div class="flex items-center gap-4">
+        <!-- Upload Button -->
+        <button onclick="document.getElementById('fileInput').click()" class="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 dark:bg-ytDarkCard dark:hover:bg-ytDarkHover px-4 py-2 rounded-full font-semibold transition">
+          <span>➕</span>
+          <span class="hidden sm:inline">رفع كتاب</span>
+        </button>
+        <input type="file" id="fileInput" accept=".pdf" onchange="handleFileUpload(event)">
+
+        <!-- Theme Toggle -->
+        <button onclick="toggleTheme()" class="w-10 h-10 rounded-full bg-gray-200 dark:bg-ytDarkCard flex items-center justify-center text-xl hover:bg-gray-300 dark:hover:bg-ytDarkHover transition">
+          🌗
+        </button>
+      </div>
+    </header>
+
+    <!-- Pages Container -->
+    <div class="flex-1 overflow-y-auto p-6">
       
-      <!-- Upload Overlay (Loading) -->
-      <div id="loadingOverlay" class="hidden absolute inset-0 bg-white/80 dark:bg-black/80 z-40 flex-col items-center justify-center backdrop-blur-sm rounded-xl">
-        <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4"></div>
-        <p class="text-lg font-bold" id="loadingText">جاري معالجة الكتاب واستخراج الغلاف...</p>
+      <!-- Loading Bar (Hidden) -->
+      <div id="loadingBox" class="hidden mb-6 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 p-4 rounded-lg font-bold flex items-center gap-3">
+        <div class="animate-spin text-xl">⏳</div>
+        <span id="loadingText">جاري استخراج الغلاف والرفع...</span>
       </div>
 
-      <!-- Views Container -->
-      <div id="homeView" class="block">
-        <h2 class="text-2xl font-bold mb-6">أحدث الكتب المضافة</h2>
-        <div id="homeBooksGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
-          <!-- Books will render here -->
+      <!-- HOME TAB -->
+      <div id="tab-home" class="block">
+        <h2 class="text-2xl font-bold mb-6">المضافة حديثاً</h2>
+        
+        <!-- Books Grid -->
+        <div id="homeBooksGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+          <!-- Populated by JS -->
         </div>
       </div>
 
-      <div id="libraryView" class="hidden">
-        <div class="flex items-center justify-between mb-6">
-          <h2 class="text-2xl font-bold">جميع كتبي</h2>
-          <span id="bookCount" class="text-gray-500 dark:text-gray-400 text-sm font-semibold">0 كتاب</span>
-        </div>
-        <div id="libraryBooksGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
-          <!-- Books will render here -->
+      <!-- MY LIBRARY TAB -->
+      <div id="tab-myLibrary" class="hidden">
+        <h2 class="text-2xl font-bold mb-6">مكتبتي الكاملة</h2>
+        
+        <!-- Books Grid -->
+        <div id="libraryBooksGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+          <!-- Populated by JS -->
         </div>
       </div>
 
-    </main>
+    </div>
+  </main>
+
+  <!-- PDF VIEWER MODAL -->
+  <div id="pdfModal" class="fixed inset-0 bg-black/90 z-50 hidden flex-col">
+    <div class="h-14 bg-gray-900 flex justify-between items-center px-4 text-white">
+      <h3 id="pdfTitle" class="font-bold truncate max-w-md">عرض الكتاب</h3>
+      <button onclick="closeViewer()" class="bg-red-500 hover:bg-red-600 px-4 py-1.5 rounded-lg font-bold">إغلاق ✕</button>
+    </div>
+    <iframe id="pdfFrame" class="w-full flex-1 border-none bg-white"></iframe>
   </div>
 
-  <!-- PDF Viewer Modal -->
-  <div id="pdfViewer">
-    <div class="h-14 bg-white dark:bg-ytDarkSec flex justify-between items-center px-4 border-b border-gray-200 dark:border-ytDark">
-      <h3 id="viewerTitle" class="font-bold text-lg truncate pr-4 text-black dark:text-white">قراءة الكتاب</h3>
-      <button onclick="closeViewer()" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold transition">إغلاق ✕</button>
-    </div>
-    <iframe id="viewerFrame"></iframe>
-  </div>
+<script>
+  // Setup PDF.js Worker
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
-  <script>
-    // ============================================================
-    // 🔗 RAILWAY BACKEND URL
-    // ============================================================
-    const RAILWAY_URL = "https://coolish.up.railway.app";
-    let isOfflineMode = false;
-    let allBooks = [];
+  // State
+  let allBooks = [];
+  let isOffline = false;
+  let db;
 
-    // ============================================================
-    //  INITIALIZATION & SERVER PING
-    // ============================================================
-    window.onload = async () => {
-      // Check theme
-      if (localStorage.theme === 'light') {
-        document.documentElement.classList.remove('dark');
-      }
-
-      // Check server availability
-      await checkServer();
-      
-      // Initialize Database & Load Data
-      await initDB();
-      await loadBooks();
-    };
-
-    async function checkServer() {
-      const statusInd = document.getElementById('statusIndicator');
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        
-        // Try pinging server
-        const res = await fetch(RAILWAY_URL + '/', { mode: 'no-cors', signal: controller.signal });
-        clearTimeout(timeoutId);
-        
-        // If we reach here without throwing, we assume it exists
-        isOfflineMode = false;
-        statusInd.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span> متصل بالخادم';
-        statusInd.className = "flex items-center gap-2 text-sm text-green-600 dark:text-green-400";
-        
-      } catch (e) {
-        // Fallback to offline
-        isOfflineMode = true;
-        statusInd.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> وضع عدم الاتصال (محلي)';
-        statusInd.className = "flex items-center gap-2 text-sm text-red-600 dark:text-red-400";
-        
-        showToast('⚠️ الخادم (Railway) غير متاح حالياً. سيتم استخدام وضع عدم الاتصال وحفظ الكتب في متصفحك.', 'warning');
-      }
+  // Init
+  window.onload = async () => {
+    // Check local storage for theme
+    if (localStorage.getItem('theme') === 'light') {
+      document.documentElement.classList.remove('dark');
     }
+    
+    await openIndexedDB();
+    await fetchBooks();
+  };
 
-    // ============================================================
-    //  THEME & UI TOGGLES
-    // ============================================================
-    function toggleTheme() {
-      const isDark = document.documentElement.classList.toggle('dark');
-      localStorage.theme = isDark ? 'dark' : 'light';
+  // --- THEME ---
+  function toggleTheme() {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  }
+
+  // --- TABS ---
+  function switchTab(tab) {
+    document.getElementById('tab-home').classList.add('hidden');
+    document.getElementById('tab-myLibrary').classList.add('hidden');
+    document.getElementById(`tab-${tab}`).classList.remove('hidden');
+
+    // Update Sidebar Styles
+    document.getElementById('btn-home').className = "w-full flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-ytDarkHover text-gray-700 dark:text-gray-300 font-semibold transition";
+    document.getElementById('btn-library').className = "w-full flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-ytDarkHover text-gray-700 dark:text-gray-300 font-semibold transition";
+    
+    if(tab === 'home') {
+      document.getElementById('btn-home').classList.add('bg-gray-200', 'dark:bg-ytDarkHover', 'text-black', 'dark:text-white');
+      document.getElementById('btn-home').classList.remove('text-gray-700', 'dark:text-gray-300');
+    } else {
+      document.getElementById('btn-library').classList.add('bg-gray-200', 'dark:bg-ytDarkHover', 'text-black', 'dark:text-white');
+      document.getElementById('btn-library').classList.remove('text-gray-700', 'dark:text-gray-300');
     }
+  }
 
-    function toggleSidebar() {
-      const sidebar = document.getElementById('sidebar');
-      sidebar.classList.toggle('hidden');
+  // --- TOAST ---
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.innerText = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 4000);
+  }
+
+  // --- DATABASE & NETWORK ---
+  async function fetchBooks() {
+    try {
+      // Because we are serving index.html FROM the server.js, we can just use relative URLs!
+      const res = await fetch('/api/books');
+      if (!res.ok) throw new Error('API down');
+      allBooks = await res.json();
+      
+      // Update UI Status
+      isOffline = false;
+      document.getElementById('connStatus').innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> متصل بالخادم';
+      document.getElementById('connStatus').className = "text-sm font-semibold flex items-center gap-2 text-green-500";
+      
+      renderBooks();
+    } catch (e) {
+      // Fallback to offline DB
+      isOffline = true;
+      document.getElementById('connStatus').innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> وضع عدم الاتصال (Offline)';
+      document.getElementById('connStatus').className = "text-sm font-semibold flex items-center gap-2 text-red-500";
+      showToast("⚠️ تعذر الاتصال بالخادم. سيتم استخدام متصفحك لحفظ الكتب.");
+      
+      allBooks = await getOfflineBooks();
+      renderBooks();
     }
+  }
 
-    function switchTab(tab) {
-      document.getElementById('homeView').style.display = tab === 'home' ? 'block' : 'none';
-      document.getElementById('libraryView').style.display = tab === 'library' ? 'block' : 'none';
+  // --- FILE UPLOAD & PDF COVER EXTRACTION ---
+  async function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    document.getElementById('loadingBox').classList.remove('hidden');
+    document.getElementById('loadingText').innerText = `جاري استخراج الغلاف لكتاب: ${file.name}...`;
+
+    try {
+      const fileDataURL = await readFileAsDataURL(file);
+      const coverDataURL = await extractPDFCover(fileDataURL);
       
-      const btnHome = document.getElementById('btn-home');
-      const btnLib = document.getElementById('btn-library');
-      
-      if (tab === 'home') {
-        btnHome.classList.add('bg-ytLightSec', 'dark:bg-ytDarkSec');
-        btnLib.classList.remove('bg-ytLightSec', 'dark:bg-ytDarkSec');
+      const newBook = {
+        id: Date.now().toString(),
+        name: file.name.replace('.pdf', ''),
+        size: formatSize(file.size),
+        date: new Date().toLocaleDateString('ar-EG'),
+        cover: coverDataURL,
+        pdfData: fileDataURL
+      };
+
+      document.getElementById('loadingText').innerText = "جاري الحفظ...";
+
+      if (!isOffline) {
+        // Save to Server
+        const res = await fetch('/api/books', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newBook)
+        });
+        if (!res.ok) throw new Error("فشل الرفع للخادم");
+        allBooks.push(newBook);
       } else {
-        btnLib.classList.add('bg-ytLightSec', 'dark:bg-ytDarkSec');
-        btnHome.classList.remove('bg-ytLightSec', 'dark:bg-ytDarkSec');
+        // Save to Offline IndexedDB
+        await saveOfflineBook(newBook);
+        allBooks.push(newBook);
       }
-      
-      // Re-render books based on search input if switching
+
       renderBooks();
+    } catch (err) {
+      console.error(err);
+      alert("حدث خطأ أثناء الرفع: " + err.message);
     }
 
-    function showToast(message, type = 'info') {
-      const container = document.getElementById('toastContainer');
-      const toast = document.createElement('div');
+    document.getElementById('loadingBox').classList.add('hidden');
+    event.target.value = ''; // Reset input
+  }
+
+  // Read file as Base64
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = e => reject(e);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Extract page 1 of PDF as an Image (Magic happens here!)
+  async function extractPDFCover(dataUrl) {
+    try {
+      const pdfData = atob(dataUrl.split(',')[1]);
+      const loadingTask = pdfjsLib.getDocument({data: pdfData});
+      const pdf = await loadingTask.promise;
+      const page = await pdf.getPage(1);
+
+      const scale = 1.5; // High Quality
+      const viewport = page.getViewport({ scale });
       
-      const colors = type === 'warning' ? 'bg-orange-500 text-white' : 
-                     type === 'error' ? 'bg-red-500 text-white' : 
-                     'bg-ytDarkSec text-white';
-                     
-      toast.className = `toast-enter flex items-center p-4 mb-4 rounded-xl shadow-xl pointer-events-auto ${colors}`;
-      toast.innerHTML = `<span class="font-bold">${message}</span>`;
-      
-      container.appendChild(toast);
-      
-      setTimeout(() => {
-        toast.classList.replace('toast-enter', 'toast-exit');
-        setTimeout(() => toast.remove(), 400);
-      }, 5000); // 5 seconds for user to read
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      await page.render({ canvasContext: context, viewport: viewport }).promise;
+      return canvas.toDataURL('image/jpeg', 0.8);
+    } catch (e) {
+      console.warn("Could not extract cover, using default.", e);
+      return "https://via.placeholder.com/300x450/0f0f0f/00e5ff?text=PDF";
     }
+  }
 
-    // ============================================================
-    //  INDEXEDDB (OFFLINE FALLBACK)
-    // ============================================================
-    let db;
-    function initDB() {
-      return new Promise((resolve, reject) => {
-        const req = indexedDB.open('NixuvikBooks', 1);
-        req.onupgradeneeded = (e) => {
-          let database = e.target.result;
-          if (!database.objectStoreNames.contains('books')) {
-            database.createObjectStore('books', { keyPath: 'id' });
-          }
-        };
-        req.onsuccess = (e) => { db = e.target.result; resolve(); };
-        req.onerror = (e) => { console.error(e); reject(); };
-      });
-    }
-
-    function saveBookToDB(book) {
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction('books', 'readwrite');
-        tx.objectStore('books').put(book);
-        tx.oncomplete = () => resolve();
-        tx.onerror = (e) => reject(e);
-      });
-    }
-
-    function getBooksFromDB() {
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction('books', 'readonly');
-        const req = tx.objectStore('books').getAll();
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject();
-      });
-    }
-
-    function deleteBookFromDB(id) {
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction('books', 'readwrite');
-        tx.objectStore('books').delete(id);
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject();
-      });
-    }
-
-    // ============================================================
-    //  FILE UPLOAD & PDF PROCESSING
-    // ============================================================
-    async function handleFileUpload(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      if (file.type !== 'application/pdf') {
-        showToast('يرجى رفع ملفات PDF فقط.', 'error');
-        return;
-      }
-
-      document.getElementById('loadingOverlay').classList.remove('hidden');
-      document.getElementById('loadingOverlay').classList.add('flex');
-      
-      try {
-        // Read file as ArrayBuffer for PDF.js
-        const arrayBuffer = await file.arrayBuffer();
-        
-        // Extract Cover (Page 1)
-        const coverData = await extractPdfCover(arrayBuffer);
-        
-        // Read file as Base64 for storing and viewing
-        const base64Data = await readAsBase64(file);
-
-        const newBook = {
-          id: Date.now().toString(),
-          title: file.name.replace('.pdf', ''),
-          size: file.size,
-          uploadDate: new Date().toLocaleDateString('ar-EG'),
-          coverData: coverData,
-          pdfData: base64Data
-        };
-
-        if (isOfflineMode) {
-          await saveBookToDB(newBook);
-        } else {
-          // Fallback to local IDB if server is unreachable
-          await saveBookToDB(newBook); 
-        }
-
-        showToast('✅ تم رفع الكتاب واستخراج الغلاف بنجاح!');
-        await loadBooks();
-        
-      } catch (err) {
-        console.error(err);
-        showToast('❌ حدث خطأ أثناء معالجة الكتاب', 'error');
-      } finally {
-        document.getElementById('loadingOverlay').classList.add('hidden');
-        document.getElementById('loadingOverlay').classList.remove('flex');
-        event.target.value = ''; // Reset input
-      }
-    }
-
-    function readAsBase64(file) {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
-        reader.readAsDataURL(file);
-      });
-    }
-
-    async function extractPdfCover(arrayBuffer) {
-      try {
-        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-        const pdf = await loadingTask.promise;
-        const page = await pdf.getPage(1);
-        
-        // Set scale for high quality thumbnail
-        const scale = 1.5;
-        const viewport = page.getViewport({ scale });
-        
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-        
-        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-        
-        return canvas.toDataURL('image/jpeg', 0.8);
-      } catch (e) {
-        console.error("Cover extraction failed", e);
-        // Return a transparent 1x1 image as fallback
-        return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='; 
-      }
-    }
-
-    // ============================================================
-    //  RENDERING & VIEWING
-    // ============================================================
-    async function loadBooks() {
-      if (isOfflineMode) {
-        allBooks = await getBooksFromDB();
-      } else {
-        // Fallback fetch from DB
-        allBooks = await getBooksFromDB(); 
-      }
-      
-      // Sort newest first
-      allBooks.sort((a, b) => b.id - a.id);
-      renderBooks();
-    }
-
-    function searchBooks() {
-      renderBooks();
-    }
-
-    function formatBytes(bytes) {
-      if (bytes === 0) return '0 Bytes';
-      const k = 1024, dm = 1, sizes = ['B', 'KB', 'MB', 'GB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-    }
-
-    function renderBooks() {
-      const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-      const filteredBooks = allBooks.filter(b => b.title.toLowerCase().includes(searchTerm));
-      
-      document.getElementById('bookCount').innerText = `${filteredBooks.length} كتاب`;
-      
-      const homeGrid = document.getElementById('homeBooksGrid');
-      const libGrid = document.getElementById('libraryBooksGrid');
-      
-      if (filteredBooks.length === 0) {
-        const emptyState = `
-          <div class="col-span-full flex flex-col items-center justify-center py-20 text-gray-500">
-            <svg class="w-20 h-20 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
-            <p class="text-xl font-bold mb-2">لا توجد كتب هنا</p>
-            <p>اضغط على "رفع كتاب" لإضافة كتابك الأول</p>
+  // --- RENDER BOOKS ---
+  function renderBooks() {
+    const gridHtml = allBooks.length === 0 
+      ? '<div class="col-span-full text-center py-12 text-gray-500 dark:text-gray-400 font-bold text-lg">لا توجد كتب. اضغط على "➕ رفع كتاب" للبدء!</div>'
+      : allBooks.map(book => `
+        <div class="book-card flex flex-col group">
+          <div class="relative w-full overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-200 dark:bg-ytDarkCard" onclick="openViewer('${book.id}')">
+            <img src="${book.cover}" class="book-thumbnail shadow-sm group-hover:shadow-md transition" alt="cover" loading="lazy">
+            <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition"></div>
+            <div class="absolute bottom-2 left-2 bg-black/80 text-white text-xs px-2 py-1 rounded font-bold backdrop-blur-sm">${book.size}</div>
           </div>
-        `;
-        homeGrid.innerHTML = emptyState;
-        libGrid.innerHTML = emptyState;
-        return;
-      }
-
-      const buildHtml = (booksArr) => booksArr.map(book => `
-          <div class="group cursor-pointer flex flex-col gap-3 relative">
-            <button onclick="deleteBook('${book.id}', event)" class="absolute top-2 left-2 z-10 p-2 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg hover:bg-red-700" title="حذف الكتاب">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-            </button>
-            <div class="book-cover-container shadow-md group-hover:shadow-xl transition-shadow border border-gray-200 dark:border-ytDarkSec" onclick="viewBook('${book.id}')">
-              <img src="${book.coverData}" alt="غلاف" onerror="this.style.display='none'">
+          <div class="mt-3 flex justify-between items-start gap-2">
+            <div>
+              <h3 class="font-bold text-sm line-clamp-2 leading-tight" title="${book.name}" onclick="openViewer('${book.id}')">${book.name}</h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${book.date}</p>
             </div>
-            <div class="flex flex-col pr-1" onclick="viewBook('${book.id}')">
-              <h3 class="font-bold text-sm sm:text-base line-clamp-2 leading-snug dark:text-white">${book.title}</h3>
-              <p class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">${formatBytes(book.size)} • ${book.uploadDate}</p>
-            </div>
+            <button onclick="deleteBook('${book.id}')" class="text-gray-400 hover:text-red-500 p-1" title="حذف الكتاب">🗑</button>
           </div>
+        </div>
       `).join('');
 
-      homeGrid.innerHTML = buildHtml(filteredBooks.slice(0, 6)); // First 6 for Home
-      libGrid.innerHTML = buildHtml(filteredBooks);              // All for My Library
-    }
+    // Both grids reflect same items for now, just sliced differently if needed.
+    document.getElementById('homeBooksGrid').innerHTML = gridHtml;
+    document.getElementById('libraryBooksGrid').innerHTML = gridHtml;
+  }
 
-    async function deleteBook(id, event) {
-      event.stopPropagation();
-      if (!confirm('هل أنت متأكد من حذف هذا الكتاب؟')) return;
-      
-      await deleteBookFromDB(id);
-      showToast('🗑 تم حذف الكتاب بنجاح');
-      await loadBooks();
-    }
+  // --- ACTIONS ---
+  function openViewer(id) {
+    const book = allBooks.find(b => b.id === id);
+    if (!book) return;
+    document.getElementById('pdfTitle').innerText = book.name;
+    document.getElementById('pdfFrame').src = book.pdfData;
+    document.getElementById('pdfModal').classList.remove('hidden');
+    document.getElementById('pdfModal').classList.add('flex');
+  }
 
-    function viewBook(id) {
-      const book = allBooks.find(b => b.id === id);
-      if (!book) return;
-      
-      document.getElementById('viewerTitle').innerText = book.title;
-      document.getElementById('viewerFrame').src = book.pdfData;
-      document.getElementById('pdfViewer').classList.add('active');
-      document.body.style.overflow = 'hidden'; // prevent background scrolling
-    }
+  function closeViewer() {
+    document.getElementById('pdfModal').classList.add('hidden');
+    document.getElementById('pdfModal').classList.remove('flex');
+    document.getElementById('pdfFrame').src = '';
+  }
 
-    function closeViewer() {
-      document.getElementById('pdfViewer').classList.remove('active');
-      document.getElementById('viewerFrame').src = '';
-      document.body.style.overflow = '';
+  async function deleteBook(id) {
+    if(!confirm("هل أنت متأكد من حذف هذا الكتاب؟")) return;
+    
+    if(!isOffline) {
+      await fetch('/api/books/' + id, { method: 'DELETE' });
+    } else {
+      await deleteOfflineBook(id);
     }
-  </script>
+    
+    allBooks = allBooks.filter(b => b.id !== id);
+    renderBooks();
+  }
+
+  // --- OFFLINE INDEXEDDB LOGIC ---
+  function openIndexedDB() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('NixuvikBooks', 1);
+      request.onupgradeneeded = e => {
+        const d = e.target.result;
+        if (!d.objectStoreNames.contains('books')) d.createObjectStore('books', { keyPath: 'id' });
+      };
+      request.onsuccess = e => { db = e.target.result; resolve(); };
+      request.onerror = e => reject(e);
+    });
+  }
+
+  function saveOfflineBook(book) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('books', 'readwrite');
+      tx.objectStore('books').put(book);
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e);
+    });
+  }
+
+  function getOfflineBooks() {
+    return new Promise((resolve, reject) => {
+      if (!db) resolve([]);
+      const tx = db.transaction('books', 'readonly');
+      const req = tx.objectStore('books').getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = e => reject(e);
+    });
+  }
+
+  function deleteOfflineBook(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('books', 'readwrite');
+      tx.objectStore('books').delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e);
+    });
+  }
+
+  function formatSize(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    return (b / 1048576).toFixed(1) + ' MB';
+  }
+</script>
 </body>
 </html>
